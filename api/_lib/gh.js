@@ -34,18 +34,31 @@ const OWNER = () => process.env.GITHUB_OWNER;
 const OWNER_TYPE = () => process.env.GITHUB_OWNER_TYPE || "user";
 
 export async function ensureRepo({ repo, makePrivate }) {
+  let existing = null;
+
   try {
-    await gh(`/repos/${OWNER()}/${repo}`);
-    return;
+    existing = await gh(`/repos/${OWNER()}/${repo}`);
   } catch (e) {
     if (e.statusCode !== 404) throw e;
   }
 
-  const payload = { name: repo, private: !!makePrivate, auto_init: true };
-  if (OWNER_TYPE() === "org") {
-    await gh(`/orgs/${OWNER()}/repos`, { method: "POST", body: payload });
-  } else {
-    await gh(`/user/repos`, { method: "POST", body: payload });
+  if (!existing) {
+    const payload = { name: repo, private: !!makePrivate, auto_init: true };
+
+    if (OWNER_TYPE() === "org") {
+      await gh(`/orgs/${OWNER()}/repos`, { method: "POST", body: payload });
+    } else {
+      await gh(`/user/repos`, { method: "POST", body: payload });
+    }
+    return;
+  }
+
+  // ✅ sync visibility if needed (token harus punya admin permission)
+  if (typeof makePrivate === "boolean" && existing.private !== !!makePrivate) {
+    await gh(`/repos/${OWNER()}/${repo}`, {
+      method: "PATCH",
+      body: { private: !!makePrivate }
+    });
   }
 }
 
