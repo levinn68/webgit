@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/upload.js": { "maxDuration": 60 },
+    "api/config.js": { "maxDuration": 30 }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" }
+  ]
+}
