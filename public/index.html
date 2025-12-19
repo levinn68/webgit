@@ -43,13 +43,12 @@
     }
     .xterm { padding: 14px; }
     .xterm-viewport { border-radius: 18px; }
-
-    @keyframes toastIn { from { transform: translateY(8px); opacity:0 } to { transform: translateY(0); opacity:1 } }
-    @keyframes toastOut { to { transform: translateY(8px); opacity:0 } }
-
     .nice-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
     .nice-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.22); border-radius: 999px; }
     .nice-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.32); }
+
+    @keyframes toastIn { from { transform: translateY(8px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+    @keyframes toastOut { to { transform: translateY(8px); opacity:0 } }
   </style>
 </head>
 
@@ -65,12 +64,10 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <span id="cfgPill" class="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/40 px-3 py-1 text-xs text-slate-300">
-          <span id="cfgPillDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
-          <span id="cfgPillText" class="font-mono">no config</span>
-        </span>
-      </div>
+      <span id="cfgPill" class="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/40 px-3 py-1 text-xs text-slate-300">
+        <span id="cfgPillDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+        <span id="cfgPillText" class="font-mono">no config</span>
+      </span>
     </header>
 
     <!-- Terminal -->
@@ -193,10 +190,12 @@
             <h2 class="text-base font-semibold">ZIP Preview</h2>
             <p class="text-xs text-slate-500">Lihat isi ZIP sebelum deploy</p>
           </div>
-          <button id="pickZipBtn"
-            class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition">
+
+          <!-- ✅ FIX: label-for = native file picker (paling aman) -->
+          <label for="zipInput" id="pickZipBtn"
+            class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition cursor-pointer inline-flex items-center justify-center">
             Choose ZIP
-          </button>
+          </label>
         </div>
 
         <div class="mt-4 grid gap-3">
@@ -367,8 +366,9 @@
   <!-- Toast container -->
   <div id="toastHost" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
 
+  <!-- ✅ FIX: input tidak hidden; dipicu native via label[for] -->
   <input id="zipInput" type="file" accept=".zip"
-  style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0;" />
+    style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0;" />
 
   <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
 
@@ -572,7 +572,6 @@
 
     // ===== ZIP Preview =====
     const zipInput = document.getElementById("zipInput");
-    const pickZipBtn = document.getElementById("pickZipBtn");
     const zipName = document.getElementById("zipName");
     const zipSize = document.getElementById("zipSize");
     const zipFiles = document.getElementById("zipFiles");
@@ -700,7 +699,6 @@
         }
       }
 
-      // filter paths first
       let t = root;
       if (filter) {
         const f = filter.toLowerCase();
@@ -712,7 +710,6 @@
         t = makeTree(filtered);
       }
 
-      // render root children
       const entries = Array.from(t.children.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
       for (const [fname, child] of entries) {
         if (lines >= MAX_LINES) break;
@@ -810,16 +807,27 @@
       }
     }
 
-    pickZipBtn.addEventListener("click", () => zipInput.click());
     zipInput.addEventListener("change", (e) => {
       const f = e.target.files?.[0];
       if (!f) return;
+
+      // optional UX: reject >4.5MB
+      if (f.size > 4.5 * 1024 * 1024) {
+        toast("ZIP terlalu besar. Maks ~4.5MB.", "err");
+        writeln("ERROR: ZIP terlalu besar. Maks ~4.5MB.");
+        scrollToBottom();
+        zipInput.value = "";
+        return;
+      }
+
       if (!f.name.toLowerCase().endsWith(".zip")) {
         toast("File harus .zip", "err");
         writeln("ERROR: File harus .zip");
         scrollToBottom();
+        zipInput.value = "";
         return;
       }
+
       previewZip(f);
     });
 
@@ -902,11 +910,10 @@
 
     reviewBtn.addEventListener("click", openModal);
 
-    // ===== Dummy deploy steps + real request =====
+    // ===== Dummy deploy + real request =====
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
     async function runDummySteps(controller) {
-      // controller.cancelled set true to stop early
       const steps = [
         { pct: 35, state:"working", msg:"Uploading ZIP…" },
         { pct: 55, state:"working", msg:"Extracting package…" },
@@ -929,10 +936,9 @@
 
       if (!zipMeta.file) throw new Error("ZIP belum dipilih.");
 
-      // Apply config dulu biar repo ada
+      // Apply config -> will create repo AND sync visibility sesuai toggle
       await applyConfigFromUI();
 
-      // Start dummy + request bareng
       writeln(`$ deploy -> ${repo}#${branch}`);
       scrollToBottom();
       toast("Deploy started", "info");
@@ -958,7 +964,6 @@
         });
         json = await res.json().catch(() => ({}));
       } finally {
-        // stop dummy after request done
         ctrl.cancelled = true;
         await dummy.catch(() => {});
       }
@@ -973,7 +978,6 @@
         throw new Error(msg);
       }
 
-      // success
       setRun("success", "Done ✅", 100);
       writeln(`✅ SELESAI`);
       writeln(`Repo: ${json.owner}/${json.repo}`);
