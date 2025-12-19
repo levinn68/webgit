@@ -4,6 +4,6 @@
     "api/config.js": { "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/", "destination": "/public/index.html" }
+    { "source": "/", "destination": "/index.html" }
   ]
 }
