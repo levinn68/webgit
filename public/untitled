@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WebGit — Vercel Deployer</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Inter, ui-sans-serif, system-ui; }
+    .bg-grid {
+      background-image:
+        radial-gradient(circle at 18% 20%, rgba(99,102,241,.18) 0, transparent 55%),
+        radial-gradient(circle at 82% 24%, rgba(34,211,238,.14) 0, transparent 60%),
+        radial-gradient(circle at 50% 88%, rgba(16,185,129,.10) 0, transparent 55%),
+        linear-gradient(to bottom, rgba(2,6,23,1), rgba(2,6,23,.92));
+    }
+    .noise::before{
+      content:"";
+      position:fixed; inset:0;
+      pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+      mix-blend-mode:overlay;
+      opacity:.35;
+    }
+    .glow-border { position: relative; }
+    .glow-border::before{
+      content:"";
+      position:absolute; inset:-1px;
+      border-radius: 22px;
+      background: linear-gradient(90deg, rgba(99,102,241,.35), rgba(34,211,238,.25), rgba(16,185,129,.25), rgba(99,102,241,.35));
+      filter: blur(10px);
+      opacity:.55;
+      z-index:-1;
+    }
+    .xterm { padding: 14px; }
+    .xterm-viewport { border-radius: 18px; }
+
+    @keyframes toastIn { from { transform: translateY(8px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+    @keyframes toastOut { to { transform: translateY(8px); opacity:0 } }
+
+    .nice-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
+    .nice-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.22); border-radius: 999px; }
+    .nice-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.32); }
+  </style>
+</head>
+
+<body class="bg-grid noise min-h-screen text-slate-100">
+  <div class="mx-auto max-w-6xl px-4 py-6 space-y-4">
+
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 shadow-lg shadow-indigo-500/20"></div>
+        <div class="leading-tight">
+          <h1 class="text-xl font-semibold tracking-tight">WebGit Deployer</h1>
+          <p class="text-sm text-slate-400">Murni Vercel • ZIP ≤ 4.5MB • Dummy terminal</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="cfgPill" class="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/40 px-3 py-1 text-xs text-slate-300">
+          <span id="cfgPillDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+          <span id="cfgPillText" class="font-mono">no config</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Terminal -->
+    <section class="glow-border rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl shadow-sm overflow-hidden">
+      <div class="flex flex-col gap-2 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"></span>
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+          <span class="ml-2 text-sm font-semibold">Terminal</span>
+          <span class="ml-2 hidden sm:inline text-xs text-slate-500">dummy steps + final result</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="downloadLogsBtn"
+            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
+            Download logs
+          </button>
+          <button id="copyLogsBtn"
+            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
+            Copy logs
+          </button>
+          <button id="clearBtn"
+            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div id="terminal" class="h-[46vh] bg-slate-950/80"></div>
+
+      <div class="border-t border-slate-800 bg-slate-950/45 px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
+              <span id="runDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+              <span id="runText" class="font-mono">idle</span>
+            </span>
+            <span class="text-xs text-slate-500" id="runHint">Siap.</span>
+          </div>
+
+          <div class="w-56">
+            <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+              <div id="runBar" class="h-full w-0 bg-indigo-500 transition-all"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="grid gap-4 lg:grid-cols-12">
+      <!-- Config -->
+      <section class="lg:col-span-4 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold">Config</h2>
+          <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
+            <span id="cfgDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+            <span id="cfgText" class="font-mono">not applied</span>
+          </span>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div>
+            <label class="text-sm text-slate-300">Repo name</label>
+            <input id="repoInput" placeholder="mis: mysite"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            <p id="repoHint" class="mt-1 text-xs text-slate-500">Format: a-z 0-9 . _ -</p>
+          </div>
+
+          <div>
+            <label class="text-sm text-slate-300">Branch</label>
+            <input id="branchInput" value="main"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-slate-300">Deploy key</label>
+              <button id="revealKeyBtn" class="text-xs text-slate-400 hover:text-slate-200 transition">show</button>
+            </div>
+            <input id="deployKeyInput" type="password" placeholder="wajib (kunci deploy)"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              autocomplete="off" />
+          </div>
+
+          <div class="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+            <div>
+              <p class="text-sm font-medium">Private repo</p>
+              <p class="text-xs text-slate-500">ON = private, OFF = public</p>
+            </div>
+            <button id="privateToggle"
+              class="relative inline-flex h-8 w-14 items-center rounded-full bg-indigo-500 transition"
+              aria-pressed="true">
+              <span id="toggleKnob" class="inline-block h-6 w-6 translate-x-7 transform rounded-full bg-white transition"></span>
+            </button>
+          </div>
+
+          <button id="applyBtn"
+            class="w-full rounded-2xl bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 active:bg-indigo-600 transition">
+            Apply config
+          </button>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">
+            <div class="flex items-center justify-between">
+              <span>Current:</span>
+              <span id="currentCfg" class="font-mono text-slate-200">-</span>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-amber-800/60 bg-amber-500/10 p-3 text-xs text-amber-100">
+            Max ZIP upload: <span class="font-mono">~4.5MB</span> (limit Vercel Function).
+          </div>
+        </div>
+      </section>
+
+      <!-- ZIP Preview -->
+      <section class="lg:col-span-5 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold">ZIP Preview</h2>
+            <p class="text-xs text-slate-500">Lihat isi ZIP sebelum deploy</p>
+          </div>
+          <button id="pickZipBtn"
+            class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition">
+            Choose ZIP
+          </button>
+        </div>
+
+        <div class="mt-4 grid gap-3">
+          <div class="grid gap-2 sm:grid-cols-3">
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Selected</div>
+              <div id="zipName" class="mt-1 text-sm text-slate-200 truncate">No file</div>
+              <div id="zipSize" class="mt-1 text-xs text-slate-500">—</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Files</div>
+              <div id="zipFiles" class="mt-1 text-sm text-slate-200 font-mono">—</div>
+              <div class="mt-1 text-xs text-slate-500">exclude folders</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Top folders</div>
+              <div id="zipTop" class="mt-1 text-sm text-slate-200 font-mono truncate">—</div>
+              <div class="mt-1 text-xs text-slate-500">first-level</div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="w-full sm:max-w-sm">
+              <input id="filterInput" placeholder="Filter path... (mis: src/)"
+                class="w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500"
+                disabled />
+              <div id="filterHint" class="mt-1 text-xs text-slate-500">Pilih ZIP dulu.</div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="expandAllBtn"
+                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled>Expand</button>
+              <button id="collapseAllBtn"
+                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled>Collapse</button>
+            </div>
+          </div>
+
+          <div class="rounded-[22px] border border-slate-800 bg-slate-950/45">
+            <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div class="text-sm font-semibold">Structure</div>
+              <div id="previewStatus" class="text-xs text-slate-500">—</div>
+            </div>
+            <div id="treeWrap" class="nice-scroll max-h-[340px] overflow-auto px-2 py-2">
+              <div class="px-3 py-6 text-center text-sm text-slate-500">
+                Select a ZIP to preview its contents.
+              </div>
+            </div>
+          </div>
+
+          <p class="text-xs text-slate-500">
+            Note: preview hanya membaca daftar file, tidak menjalankan apa pun.
+          </p>
+        </div>
+      </section>
+
+      <!-- Deploy -->
+      <section class="lg:col-span-3 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div>
+          <h2 class="text-base font-semibold">Deploy</h2>
+          <p class="text-xs text-slate-500">Confirm dulu, baru push</p>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-sm">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Ready checks</span>
+              <span id="checksBadge"
+                class="rounded-full border border-slate-800 bg-slate-950/40 px-2 py-0.5 text-slate-300">0/3</span>
+            </div>
+
+            <div class="mt-3 space-y-2 text-sm">
+              <div class="flex items-center gap-2">
+                <span id="chkCfg" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>Config applied</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="chkZip" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>ZIP selected & previewed</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="chkKey" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>Deploy key filled</span>
+              </div>
+            </div>
+          </div>
+
+          <button id="reviewBtn"
+            class="w-full rounded-2xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-400 active:bg-emerald-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled>
+            Review & Deploy
+          </button>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-xs text-slate-500">
+            Proses deploy:
+            <ul class="mt-2 list-disc pl-5 space-y-1">
+              <li>Upload ZIP</li>
+              <li>Extract (server)</li>
+              <li>Commit + Push ke GitHub</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="relative mx-auto mt-16 w-[92%] max-w-2xl">
+      <div class="rounded-[22px] border border-slate-800 bg-slate-950/80 backdrop-blur-xl shadow-lg overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm font-semibold">Confirm deploy</div>
+            <div class="text-xs text-slate-500">Pastikan target & isi ZIP sudah benar</div>
+          </div>
+          <button id="closeModalBtn" class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-900 transition">
+            Close
+          </button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/45 p-4">
+              <div class="text-xs text-slate-500">Target</div>
+              <div id="modalTarget" class="mt-2 text-sm text-slate-100 font-mono">—</div>
+              <div id="modalPrivacy" class="mt-1 text-xs text-slate-400">—</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/45 p-4">
+              <div class="text-xs text-slate-500">Package</div>
+              <div id="modalZip" class="mt-2 text-sm text-slate-100 font-mono">—</div>
+              <div id="modalZipMeta" class="mt-1 text-xs text-slate-400">—</div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-amber-800/60 bg-amber-500/10 p-4 text-sm text-amber-100">
+            <div class="font-semibold">Heads up</div>
+            <div class="mt-1 text-xs text-amber-200/90">
+              Jangan push credential (<span class="font-mono">.env</span>, key, token). Kalau repo public, semua akan terlihat.
+            </div>
+          </div>
+
+          <label class="flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-950/45 p-4">
+            <input id="agreeChk" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900">
+            <div>
+              <div class="text-sm font-semibold">Saya yakin. Deploy sekarang.</div>
+              <div class="text-xs text-slate-500 mt-1">Dengan ini kamu mengonfirmasi target & isi ZIP sudah benar.</div>
+            </div>
+          </label>
+
+          <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button id="cancelDeployBtn"
+              class="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-2 text-sm text-slate-200 hover:bg-slate-900 transition">
+              Cancel
+            </button>
+            <button id="confirmDeployBtn"
+              class="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 active:bg-emerald-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled>
+              Deploy
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toastHost" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+  <input id="zipInput" type="file" accept=".zip" class="hidden" />
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+
+  <script>
+    // ===== Toast =====
+    const toastHost = document.getElementById("toastHost");
+    function toast(msg, type="info") {
+      const colors = {
+        info: "border-slate-800 bg-slate-950/80 text-slate-200",
+        ok: "border-emerald-800/70 bg-emerald-500/10 text-emerald-100",
+        err:"border-rose-800/70 bg-rose-500/10 text-rose-100"
+      };
+      const el = document.createElement("div");
+      el.className = `rounded-2xl border px-4 py-3 text-sm shadow-sm backdrop-blur-xl ${colors[type] || colors.info}`;
+      el.style.animation = "toastIn .18s ease-out both";
+      el.innerHTML = `<div class="flex items-start gap-3">
+        <div class="mt-0.5 h-2 w-2 rounded-full ${type==="ok"?"bg-emerald-400":type==="err"?"bg-rose-400":"bg-slate-400"}"></div>
+        <div class="leading-snug">${msg}</div>
+      </div>`;
+      toastHost.appendChild(el);
+      setTimeout(() => {
+        el.style.animation = "toastOut .18s ease-in both";
+        setTimeout(() => el.remove(), 200);
+      }, 2400);
+    }
+
+    // ===== Terminal =====
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontSize: 13,
+      theme: { background: "#020617", foreground: "#e2e8f0" }
+    });
+    term.open(document.getElementById("terminal"));
+
+    let logsText = "";
+    const write = (s) => { term.write(s); logsText += s; };
+    const writeln = (s) => write(s + "\r\n");
+    function scrollToBottom(){ try { term.scrollToBottom(); } catch {} }
+
+    // ===== Run UI =====
+    const runDot = document.getElementById("runDot");
+    const runText = document.getElementById("runText");
+    const runHint = document.getElementById("runHint");
+    const runBar = document.getElementById("runBar");
+
+    function setRun(state, hint, pct) {
+      const map = {
+        idle: ["bg-slate-500", "bg-indigo-500", 0],
+        ready:["bg-cyan-400", "bg-indigo-500", 10],
+        working:["bg-amber-400", "bg-emerald-500", 40],
+        pushing:["bg-cyan-400", "bg-indigo-500", 85],
+        success:["bg-emerald-400", "bg-emerald-500", 100],
+        error:["bg-rose-400", "bg-rose-500", 100]
+      };
+      const [dot, bar, defPct] = map[state] || map.idle;
+      runDot.className = "inline-block h-1.5 w-1.5 rounded-full " + dot;
+      runText.textContent = state;
+      runHint.textContent = hint || "";
+      runBar.className = "h-full transition-all " + bar;
+      runBar.style.width = (pct ?? defPct) + "%";
+    }
+    setRun("idle", "Siap.", 0);
+
+    // ===== Buttons logs =====
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      term.reset();
+      logsText = "";
+      writeln("Terminal cleared.");
+      scrollToBottom();
+      toast("Terminal cleared", "info");
+    });
+    document.getElementById("copyLogsBtn").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(logsText.replace(/\r/g,""));
+        toast("Logs copied", "ok");
+      } catch {
+        toast("Gagal copy (izin clipboard)", "err");
+      }
+    });
+    document.getElementById("downloadLogsBtn").addEventListener("click", () => {
+      const blob = new Blob([logsText.replace(/\r/g,"")], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "webgit-logs.txt";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("Logs downloaded", "ok");
+    });
+
+    // ===== Config =====
+    const repoInput = document.getElementById("repoInput");
+    const repoHint = document.getElementById("repoHint");
+    const branchInput = document.getElementById("branchInput");
+    const deployKeyInput = document.getElementById("deployKeyInput");
+    const revealKeyBtn = document.getElementById("revealKeyBtn");
+    const applyBtn = document.getElementById("applyBtn");
+    const privateToggle = document.getElementById("privateToggle");
+    const toggleKnob = document.getElementById("toggleKnob");
+    const currentCfg = document.getElementById("currentCfg");
+    const cfgDot = document.getElementById("cfgDot");
+    const cfgText = document.getElementById("cfgText");
+    const cfgPill = document.getElementById("cfgPill");
+    const cfgPillDot = document.getElementById("cfgPillDot");
+    const cfgPillText = document.getElementById("cfgPillText");
+
+    const repoRe = /^[a-zA-Z0-9._-]+$/;
+    let makePrivate = true;
+    let cfgApplied = false;
+
+    function togglePrivate(on) {
+      makePrivate = on;
+      privateToggle.setAttribute("aria-pressed", on ? "true" : "false");
+      privateToggle.className = "relative inline-flex h-8 w-14 items-center rounded-full transition " + (on ? "bg-indigo-500" : "bg-slate-700");
+      toggleKnob.className = "inline-block h-6 w-6 transform rounded-full bg-white transition " + (on ? "translate-x-7" : "translate-x-1");
+      refreshChecks();
+    }
+    togglePrivate(true);
+
+    privateToggle.addEventListener("click", () => togglePrivate(!makePrivate));
+
+    revealKeyBtn.addEventListener("click", () => {
+      const isPw = deployKeyInput.type === "password";
+      deployKeyInput.type = isPw ? "text" : "password";
+      revealKeyBtn.textContent = isPw ? "hide" : "show";
+    });
+
+    repoInput.addEventListener("input", () => {
+      const v = repoInput.value.trim();
+      if (!v) {
+        repoHint.textContent = "Format: a-z 0-9 . _ -";
+        repoHint.className = "mt-1 text-xs text-slate-500";
+        return;
+      }
+      if (repoRe.test(v)) {
+        repoHint.textContent = "Looks good ✓";
+        repoHint.className = "mt-1 text-xs text-emerald-300";
+      } else {
+        repoHint.textContent = "Invalid (pakai a-z 0-9 . _ -)";
+        repoHint.className = "mt-1 text-xs text-rose-300";
+      }
+    });
+
+    function getDeployKeyOrThrow() {
+      const k = (deployKeyInput.value || "").trim();
+      if (!k) throw new Error("Deploy key belum diisi.");
+      return k;
+    }
+
+    function setCfgApplied(applied, cfgStr="no config") {
+      cfgApplied = applied;
+      cfgDot.className = "inline-block h-1.5 w-1.5 rounded-full " + (applied ? "bg-emerald-400" : "bg-slate-500");
+      cfgText.textContent = applied ? "applied" : "not applied";
+      cfgPill.classList.remove("hidden");
+      cfgPillDot.className = "inline-block h-1.5 w-1.5 rounded-full " + (applied ? "bg-emerald-400" : "bg-slate-500");
+      cfgPillText.textContent = cfgStr;
+      refreshChecks();
+    }
+
+    async function applyConfigFromUI() {
+      const repo = repoInput.value.trim();
+      const branch = (branchInput.value.trim() || "main").trim();
+      const deployKey = getDeployKeyOrThrow();
+
+      if (!repo) throw new Error("Repo name masih kosong.");
+      if (!repoRe.test(repo)) throw new Error("Repo name invalid.");
+
+      setRun("working", "Applying config…", 18);
+      writeln(`$ apply config -> ${repo}#${branch} (${makePrivate ? "private" : "public"})`);
+      scrollToBottom();
+
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-deploy-key": deployKey },
+        body: JSON.stringify({ repo, branch, makePrivate })
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || res.statusText);
+
+      const cfg = `${j.owner}/${j.repo}#${j.branch} (${j.makePrivate ? "private" : "public"})`;
+      currentCfg.textContent = cfg;
+      setCfgApplied(true, cfg);
+      setRun("ready", "Config OK. Pilih ZIP dan deploy.", 22);
+      toast("Config applied", "ok");
+      writeln(`Config OK -> ${cfg}`);
+      scrollToBottom();
+      return { repo, branch, makePrivate };
+    }
+
+    applyBtn.addEventListener("click", () => {
+      applyConfigFromUI().catch(e => {
+        setRun("error", e.message, 100);
+        toast(e.message, "err");
+        writeln("ERROR: " + e.message);
+        scrollToBottom();
+      });
+    });
+
+    deployKeyInput.addEventListener("input", refreshChecks);
+
+    // ===== ZIP Preview =====
+    const zipInput = document.getElementById("zipInput");
+    const pickZipBtn = document.getElementById("pickZipBtn");
+    const zipName = document.getElementById("zipName");
+    const zipSize = document.getElementById("zipSize");
+    const zipFiles = document.getElementById("zipFiles");
+    const zipTop = document.getElementById("zipTop");
+    const filterInput = document.getElementById("filterInput");
+    const filterHint = document.getElementById("filterHint");
+    const expandAllBtn = document.getElementById("expandAllBtn");
+    const collapseAllBtn = document.getElementById("collapseAllBtn");
+    const previewStatus = document.getElementById("previewStatus");
+    const treeWrap = document.getElementById("treeWrap");
+
+    let zipMeta = { file:null, fileCount:0, topFolders:[], allPaths:[], tree:null, previewed:false };
+
+    function formatBytes(bytes) {
+      if (!bytes && bytes !== 0) return "—";
+      const units = ["B","KB","MB","GB"];
+      let i = 0, n = bytes;
+      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+      return `${n.toFixed(i===0?0:1)} ${units[i]}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&","&amp;").replaceAll("<","&lt;")
+        .replaceAll(">","&gt;").replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function makeTree(paths) {
+      const root = { name:"", children:new Map(), files:[] };
+      for (const p of paths) {
+        const parts = p.split("/").filter(Boolean);
+        let node = root;
+        for (let i=0;i<parts.length;i++){
+          const part = parts[i];
+          const last = i === parts.length - 1;
+          if (last) node.files.push(part);
+          else {
+            if (!node.children.has(part)) node.children.set(part, { name:part, children:new Map(), files:[] });
+            node = node.children.get(part);
+          }
+        }
+      }
+      return root;
+    }
+
+    function setPreviewLoading(text) {
+      previewStatus.textContent = text || "Loading…";
+      treeWrap.innerHTML = `
+        <div class="px-3 py-8 text-center">
+          <div class="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 px-4 py-3">
+            <span class="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span class="text-sm text-slate-200">Reading ZIP…</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTree(root, filter="") {
+      const MAX_LINES = 500;
+      let lines = 0;
+
+      const wrap = document.createElement("div");
+      wrap.className = "px-2 py-2 text-sm";
+
+      function folderRow(name, depth, open) {
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-900/40 cursor-pointer select-none";
+        row.dataset.type = "folder";
+        row.dataset.open = open ? "1" : "0";
+        row.style.paddingLeft = (depth * 14 + 8) + "px";
+        row.innerHTML = `
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-800 bg-slate-950/40 text-slate-200">
+            ${open ? "▾" : "▸"}
+          </span>
+          <span class="font-medium text-slate-200">${escapeHtml(name)}</span>
+          <span class="ml-auto text-xs text-slate-500">folder</span>
+        `;
+        return row;
+      }
+
+      function fileRow(name, depth) {
+        const row = document.createElement("div");
+        row.className = "flex items-center gap-2 rounded-xl px-2 py-1 hover:bg-slate-900/40";
+        row.dataset.type = "file";
+        row.style.paddingLeft = (depth * 14 + 44) + "px";
+        row.innerHTML = `
+          <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-800 bg-slate-950/40 text-slate-200">·</span>
+          <span class="text-slate-200">${escapeHtml(name)}</span>
+          <span class="ml-auto text-xs text-slate-600">file</span>
+        `;
+        return row;
+      }
+
+      function walkInto(container, node, depth) {
+        const tmp = document.createElement("div");
+        tmp.className = "subtree";
+        container.appendChild(tmp);
+
+        const entries = Array.from(node.children.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+        for (const [fname, child] of entries) {
+          if (lines >= MAX_LINES) return;
+
+          const f = folderRow(fname, depth, true);
+          const content = document.createElement("div");
+          content.className = "folder-content";
+          tmp.appendChild(f);
+          tmp.appendChild(content);
+
+          walkInto(content, child, depth+1);
+
+          f.addEventListener("click", () => {
+            const isOpen = f.dataset.open === "1";
+            f.dataset.open = isOpen ? "0" : "1";
+            f.querySelector("span").textContent = isOpen ? "▸" : "▾";
+            content.style.display = isOpen ? "none" : "block";
+          });
+        }
+
+        const files = node.files.slice().sort((a,b)=>a.localeCompare(b));
+        for (const fl of files) {
+          if (lines >= MAX_LINES) return;
+          tmp.appendChild(fileRow(fl, depth));
+          lines++;
+        }
+      }
+
+      // filter paths first
+      let t = root;
+      if (filter) {
+        const f = filter.toLowerCase();
+        const filtered = zipMeta.allPaths.filter(p => p.toLowerCase().includes(f));
+        const header = document.createElement("div");
+        header.className = "px-3 py-2 text-xs text-slate-500";
+        header.textContent = `Filtered: ${filtered.length} file(s)`;
+        wrap.appendChild(header);
+        t = makeTree(filtered);
+      }
+
+      // render root children
+      const entries = Array.from(t.children.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+      for (const [fname, child] of entries) {
+        if (lines >= MAX_LINES) break;
+        const f = folderRow(fname, 0, true);
+        const content = document.createElement("div");
+        content.className = "folder-content";
+        wrap.appendChild(f);
+        wrap.appendChild(content);
+        walkInto(content, child, 1);
+
+        f.addEventListener("click", () => {
+          const isOpen = f.dataset.open === "1";
+          f.dataset.open = isOpen ? "0" : "1";
+          f.querySelector("span").textContent = isOpen ? "▸" : "▾";
+          content.style.display = isOpen ? "none" : "block";
+        });
+      }
+
+      if (lines >= MAX_LINES) {
+        const note = document.createElement("div");
+        note.className = "px-3 py-3 text-xs text-slate-500";
+        note.textContent = `Preview dibatasi ${MAX_LINES} baris. Gunakan filter untuk menyempitkan.`;
+        wrap.appendChild(note);
+      }
+
+      return wrap;
+    }
+
+    async function previewZip(file) {
+      zipMeta = { file, fileCount:0, topFolders:[], allPaths:[], tree:null, previewed:false };
+
+      zipName.textContent = file.name;
+      zipSize.textContent = formatBytes(file.size);
+      zipFiles.textContent = "—";
+      zipTop.textContent = "—";
+
+      filterInput.disabled = true;
+      expandAllBtn.disabled = true;
+      collapseAllBtn.disabled = true;
+      filterHint.textContent = "Loading ZIP…";
+      setPreviewLoading();
+
+      try {
+        const buf = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+
+        const paths = [];
+        let fileCount = 0;
+        const topSet = new Set();
+
+        zip.forEach((relativePath, entry) => {
+          if (entry.dir) return;
+          fileCount++;
+          const p = relativePath.replace(/\\/g, "/").replace(/^\/+/,"");
+          if (!p) return;
+          paths.push(p);
+          const first = p.split("/")[0];
+          if (first) topSet.add(first);
+        });
+
+        paths.sort((a,b)=>a.localeCompare(b));
+        const topFolders = Array.from(topSet).slice(0, 6);
+
+        zipMeta.fileCount = fileCount;
+        zipMeta.topFolders = topFolders;
+        zipMeta.allPaths = paths;
+        zipMeta.tree = makeTree(paths);
+        zipMeta.previewed = true;
+
+        zipFiles.textContent = String(fileCount);
+        zipTop.textContent = topFolders.length ? topFolders.join(", ") : "—";
+
+        filterInput.disabled = false;
+        expandAllBtn.disabled = false;
+        collapseAllBtn.disabled = false;
+        filterHint.textContent = "Filter path untuk cari cepat.";
+        previewStatus.textContent = `Loaded • ${fileCount} files`;
+
+        treeWrap.innerHTML = "";
+        treeWrap.appendChild(renderTree(zipMeta.tree, ""));
+
+        toast("ZIP preview ready", "ok");
+        refreshChecks();
+      } catch (e) {
+        zipMeta.previewed = false;
+        previewStatus.textContent = "Failed";
+        treeWrap.innerHTML = `
+          <div class="px-3 py-6 text-center text-sm text-rose-200">
+            Gagal baca ZIP: ${escapeHtml(e.message || String(e))}
+            <div class="mt-2 text-xs text-slate-500">Coba ZIP lain (jangan password-protected).</div>
+          </div>
+        `;
+        toast("Gagal baca ZIP", "err");
+        refreshChecks();
+      }
+    }
+
+    pickZipBtn.addEventListener("click", () => zipInput.click());
+    zipInput.addEventListener("change", (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      if (!f.name.toLowerCase().endsWith(".zip")) {
+        toast("File harus .zip", "err");
+        writeln("ERROR: File harus .zip");
+        scrollToBottom();
+        return;
+      }
+      previewZip(f);
+    });
+
+    filterInput.addEventListener("input", () => {
+      const q = filterInput.value.trim();
+      if (!zipMeta.previewed || !zipMeta.tree) return;
+      treeWrap.innerHTML = "";
+      treeWrap.appendChild(renderTree(zipMeta.tree, q));
+    });
+
+    expandAllBtn.addEventListener("click", () => {
+      treeWrap.querySelectorAll('[data-type="folder"]').forEach(row => {
+        row.dataset.open = "1";
+        const caret = row.querySelector("span");
+        if (caret) caret.textContent = "▾";
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains("folder-content")) next.style.display = "block";
+      });
+    });
+
+    collapseAllBtn.addEventListener("click", () => {
+      treeWrap.querySelectorAll('[data-type="folder"]').forEach(row => {
+        row.dataset.open = "0";
+        const caret = row.querySelector("span");
+        if (caret) caret.textContent = "▸";
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains("folder-content")) next.style.display = "none";
+      });
+    });
+
+    // ===== Checks + Deploy =====
+    const chkCfg = document.getElementById("chkCfg");
+    const chkZip = document.getElementById("chkZip");
+    const chkKey = document.getElementById("chkKey");
+    const checksBadge = document.getElementById("checksBadge");
+    const reviewBtn = document.getElementById("reviewBtn");
+
+    function refreshChecks() {
+      const keyOk = (deployKeyInput.value || "").trim().length > 0;
+      const zipOk = !!zipMeta.previewed && !!zipMeta.file;
+      const cfgOk = !!cfgApplied;
+
+      chkKey.className = "h-2 w-2 rounded-full " + (keyOk ? "bg-emerald-400" : "bg-slate-600");
+      chkZip.className = "h-2 w-2 rounded-full " + (zipOk ? "bg-emerald-400" : "bg-slate-600");
+      chkCfg.className = "h-2 w-2 rounded-full " + (cfgOk ? "bg-emerald-400" : "bg-slate-600");
+
+      const score = [cfgOk, zipOk, keyOk].filter(Boolean).length;
+      checksBadge.textContent = `${score}/3`;
+      reviewBtn.disabled = !(cfgOk && zipOk && keyOk);
+    }
+
+    // Modal
+    const confirmModal = document.getElementById("confirmModal");
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    const cancelDeployBtn = document.getElementById("cancelDeployBtn");
+    const confirmDeployBtn = document.getElementById("confirmDeployBtn");
+    const agreeChk = document.getElementById("agreeChk");
+
+    const modalTarget = document.getElementById("modalTarget");
+    const modalPrivacy = document.getElementById("modalPrivacy");
+    const modalZip = document.getElementById("modalZip");
+    const modalZipMeta = document.getElementById("modalZipMeta");
+
+    function openModal() {
+      modalTarget.textContent = (currentCfg.textContent && currentCfg.textContent !== "-") ? currentCfg.textContent : "—";
+      modalPrivacy.textContent = makePrivate ? "Repo will be PRIVATE" : "Repo will be PUBLIC";
+      modalZip.textContent = zipMeta.file ? zipMeta.file.name : "—";
+      modalZipMeta.textContent = zipMeta.file ? `${zipMeta.fileCount} files • ${formatBytes(zipMeta.file.size)}` : "—";
+      agreeChk.checked = false;
+      confirmDeployBtn.disabled = true;
+      confirmModal.classList.remove("hidden");
+    }
+    function closeModal() { confirmModal.classList.add("hidden"); }
+
+    closeModalBtn.addEventListener("click", closeModal);
+    cancelDeployBtn.addEventListener("click", closeModal);
+    agreeChk.addEventListener("change", () => {
+      confirmDeployBtn.disabled = !agreeChk.checked;
+    });
+
+    reviewBtn.addEventListener("click", openModal);
+
+    // ===== Dummy deploy steps + real request =====
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    async function runDummySteps(controller) {
+      // controller.cancelled set true to stop early
+      const steps = [
+        { pct: 35, state:"working", msg:"Uploading ZIP…" },
+        { pct: 55, state:"working", msg:"Extracting package…" },
+        { pct: 75, state:"pushing", msg:"Creating commit…" },
+        { pct: 90, state:"pushing", msg:"Pushing to GitHub…" }
+      ];
+      for (const s of steps) {
+        if (controller.cancelled) return;
+        setRun(s.state, s.msg, s.pct);
+        writeln(s.msg);
+        scrollToBottom();
+        await sleep(650);
+      }
+    }
+
+    async function doDeploy() {
+      const deployKey = getDeployKeyOrThrow();
+      const repo = repoInput.value.trim();
+      const branch = (branchInput.value.trim() || "main").trim();
+
+      if (!zipMeta.file) throw new Error("ZIP belum dipilih.");
+
+      // Apply config dulu biar repo ada
+      await applyConfigFromUI();
+
+      // Start dummy + request bareng
+      writeln(`$ deploy -> ${repo}#${branch}`);
+      scrollToBottom();
+      toast("Deploy started", "info");
+
+      const ctrl = { cancelled:false };
+      const dummy = runDummySteps(ctrl);
+
+      const fd = new FormData();
+      fd.append("zip", zipMeta.file, zipMeta.file.name);
+
+      const qs = new URLSearchParams({
+        repo,
+        branch,
+        private: String(makePrivate)
+      });
+
+      let res, json;
+      try {
+        res = await fetch(`/api/upload?${qs.toString()}`, {
+          method: "POST",
+          headers: { "x-deploy-key": deployKey },
+          body: fd
+        });
+        json = await res.json().catch(() => ({}));
+      } finally {
+        // stop dummy after request done
+        ctrl.cancelled = true;
+        await dummy.catch(() => {});
+      }
+
+      if (!res.ok || !json.ok) {
+        const msg = json?.error || "Deploy failed";
+        setRun("error", msg, 100);
+        writeln("ERROR: " + msg);
+        if (json?.details?.message) writeln("DETAIL: " + json.details.message);
+        scrollToBottom();
+        toast(msg, "err");
+        throw new Error(msg);
+      }
+
+      // success
+      setRun("success", "Done ✅", 100);
+      writeln(`✅ SELESAI`);
+      writeln(`Repo: ${json.owner}/${json.repo}`);
+      writeln(`Branch: ${json.branch}`);
+      writeln(`Files: ${json.files}`);
+      writeln(`Commit: ${json.commit}`);
+      if (Array.isArray(json.warnings) && json.warnings.length) {
+        writeln(`\r\nWarnings:`);
+        for (const w of json.warnings.slice(0, 20)) writeln(`- ${w}`);
+        if (json.warnings.length > 20) writeln(`- …and ${json.warnings.length - 20} more`);
+      }
+      scrollToBottom();
+      toast("Deploy success ✅", "ok");
+    }
+
+    confirmDeployBtn.addEventListener("click", async () => {
+      confirmDeployBtn.disabled = true;
+      closeModalBtn.disabled = true;
+      cancelDeployBtn.disabled = true;
+      try {
+        closeModal();
+        await doDeploy();
+      } catch (e) {
+        // already printed
+      } finally {
+        confirmDeployBtn.disabled = false;
+        closeModalBtn.disabled = false;
+        cancelDeployBtn.disabled = false;
+      }
+    });
+
+    // init
+    refreshChecks();
+    writeln("Ready.");
+    writeln("1) Apply config");
+    writeln("2) Choose ZIP → preview");
+    writeln("3) Review & Deploy → confirm");
+    scrollToBottom();
+  </script>
+</body>
+</html>
