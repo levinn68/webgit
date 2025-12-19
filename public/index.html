@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>WebGit — Vercel Deployer</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css">
-  <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- ✅ xterm (cdnjs, stabil) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.min.css">
+
+<!-- ✅ jszip (cdnjs, stabil) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <style>
     :root { color-scheme: dark; }
@@ -370,7 +374,7 @@
   <input id="zipInput" type="file" accept=".zip"
     style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0;" />
 
-  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.js"></script>
 
   <script>
     // ===== Toast =====
@@ -394,6 +398,13 @@
         setTimeout(() => el.remove(), 200);
       }, 2400);
     }
+    
+    if (typeof Terminal === "undefined") {
+  alert("xterm gagal ke-load (CDN blocked). Coba ganti jaringan / matiin data-saver / buka di Chrome biasa.");
+} else {
+  const term = new Terminal({ cursorBlink: true, fontSize: 13 });
+  term.open(document.getElementById("terminal"));
+}
 
     // ===== Terminal =====
     const term = new Terminal({
