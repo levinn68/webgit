@@ -24,16 +24,14 @@ export function initTerminal(el) {
     console.warn("xterm init failed:", e);
   }
 
-  // fallback (kalau xterm blocked)
   el.innerHTML = `<pre class="p-4 text-xs text-slate-200 whitespace-pre-wrap">[terminal fallback]
 xterm not loaded — app tetap jalan.</pre>`;
 }
 
 export function write(s) {
   logs += s;
-  if (term) {
-    term.write(s);
-  } else if (fallbackEl) {
+  if (term) term.write(s);
+  else if (fallbackEl) {
     const pre = fallbackEl.querySelector("pre");
     if (pre) pre.textContent += s;
   }
