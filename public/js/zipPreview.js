@@ -30,15 +30,11 @@ function makeTree(paths) {
   return root;
 }
 
-function renderTree(container, root, paths, filter = "") {
+function renderTree(container, paths) {
   const MAX_LINES = 500;
   let shown = 0;
 
-  const usePaths = filter
-    ? paths.filter(p => p.toLowerCase().includes(filter.toLowerCase()))
-    : paths;
-
-  const tree = makeTree(usePaths);
+  const tree = makeTree(paths);
 
   container.innerHTML = "";
   const wrap = document.createElement("div");
@@ -47,7 +43,7 @@ function renderTree(container, root, paths, filter = "") {
 
   const header = document.createElement("div");
   header.className = "px-3 py-2 text-xs text-slate-500";
-  header.textContent = filter ? `Filtered: ${usePaths.length} file(s)` : `Showing: ${usePaths.length} file(s)`;
+  header.textContent = `Showing: ${paths.length} file(s)`;
   wrap.appendChild(header);
 
   function folderRow(name, depth, open) {
@@ -110,7 +106,7 @@ function renderTree(container, root, paths, filter = "") {
   if (shown >= MAX_LINES) {
     const note = document.createElement("div");
     note.className = "px-3 py-3 text-xs text-slate-500";
-    note.textContent = `Preview dibatasi ${MAX_LINES} baris. Gunakan filter.`;
+    note.textContent = `Preview dibatasi ${MAX_LINES} baris.`;
     wrap.appendChild(note);
   }
 }
@@ -118,13 +114,12 @@ function renderTree(container, root, paths, filter = "") {
 export async function readZipAndPreview({ file, els }) {
   if (!window.JSZip) throw new Error("JSZip tidak ke-load.");
 
-  const { zipName, zipSize, zipFiles, zipTop, filterInput, filterHint, previewStatus, treeWrap } = els;
+  const { zipName, zipSize, zipFiles, zipTop, previewStatus, treeWrap } = els;
 
   zipName.textContent = file.name;
   zipSize.textContent = fmtBytes(file.size);
   zipFiles.textContent = "—";
   zipTop.textContent = "—";
-  filterInput.disabled = true;
 
   previewStatus.textContent = "Loading…";
   treeWrap.innerHTML = `<div class="px-3 py-6 text-center text-sm text-slate-500">Reading ZIP…</div>`;
@@ -153,10 +148,7 @@ export async function readZipAndPreview({ file, els }) {
   zipTop.textContent = topFolders.length ? topFolders.join(", ") : "—";
   previewStatus.textContent = `Loaded • ${fileCount} files`;
 
-  filterInput.disabled = false;
-  filterHint.textContent = "Filter path untuk cari cepat.";
-
-  renderTree(treeWrap, null, paths, "");
+  renderTree(treeWrap, paths);
 
   return {
     file,
@@ -165,8 +157,4 @@ export async function readZipAndPreview({ file, els }) {
     previewed: true,
     topFolders
   };
-}
-
-export function applyFilter({ treeWrap, paths, query }) {
-  renderTree(treeWrap, null, paths, query || "");
 }
