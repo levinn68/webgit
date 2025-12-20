@@ -11,7 +11,7 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- ✅ STABLE CDN -->
+  <!-- Stable CDN -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.js"></script>
@@ -145,7 +145,6 @@
               <p class="text-sm font-medium">Private repo</p>
               <p class="text-xs text-slate-500">ON = private, OFF = public</p>
             </div>
-            <!-- ✅ type button biar gak ke-submit -->
             <button id="privateToggle" type="button"
               class="relative inline-flex h-8 w-14 items-center rounded-full bg-indigo-500 transition"
               aria-pressed="true">
@@ -179,7 +178,6 @@
             <p class="text-xs text-slate-500">Lihat isi ZIP sebelum deploy</p>
           </div>
 
-          <!-- ✅ Label-for: native picker paling stabil -->
           <label for="zipInput"
             class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition cursor-pointer inline-flex items-center justify-center">
             Choose ZIP
@@ -202,24 +200,6 @@
               <div class="text-xs text-slate-500">Top folders</div>
               <div id="zipTop" class="mt-1 text-sm text-slate-200 font-mono truncate">—</div>
               <div class="mt-1 text-xs text-slate-500">first-level</div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div class="w-full sm:max-w-sm">
-              <input id="filterInput" placeholder="Filter path... (mis: src/)"
-                class="w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500"
-                disabled />
-              <div id="filterHint" class="mt-1 text-xs text-slate-500">Pilih ZIP dulu.</div>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button id="expandAllBtn" type="button"
-                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled>Expand</button>
-              <button id="collapseAllBtn" type="button"
-                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled>Collapse</button>
             </div>
           </div>
 
@@ -288,7 +268,6 @@
 
   <div id="toastHost" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
 
-  <!-- App -->
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
