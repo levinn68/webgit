@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WebGit Deployer</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- ✅ STABLE CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.js"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Inter, ui-sans-serif, system-ui; }
+
+    .bg-grid {
+      background-image:
+        radial-gradient(circle at 18% 20%, rgba(99,102,241,.18) 0, transparent 55%),
+        radial-gradient(circle at 82% 24%, rgba(34,211,238,.14) 0, transparent 60%),
+        radial-gradient(circle at 50% 88%, rgba(16,185,129,.10) 0, transparent 55%),
+        linear-gradient(to bottom, rgba(2,6,23,1), rgba(2,6,23,.92));
+    }
+    .noise::before{
+      content:"";
+      position:fixed; inset:0;
+      pointer-events:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+      mix-blend-mode:overlay;
+      opacity:.35;
+    }
+    .nice-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
+    .nice-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.22); border-radius: 999px; }
+    .nice-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.32); }
+    .xterm { padding: 14px; }
+    .xterm-viewport { border-radius: 18px; }
+  </style>
+</head>
+
+<body class="bg-grid noise min-h-screen text-slate-100">
+  <div class="mx-auto max-w-6xl px-4 py-6 space-y-4">
+
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 shadow-lg shadow-indigo-500/20"></div>
+        <div class="leading-tight">
+          <h1 class="text-xl font-semibold tracking-tight">WebGit Deployer</h1>
+          <p class="text-sm text-slate-400">Vercel only • ZIP ≤ 4.5MB • Dummy terminal</p>
+        </div>
+      </div>
+
+      <span id="cfgPill" class="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/40 px-3 py-1 text-xs text-slate-300">
+        <span id="cfgPillDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+        <span id="cfgPillText" class="font-mono">no config</span>
+      </span>
+    </header>
+
+    <!-- Terminal -->
+    <section class="rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl shadow-sm overflow-hidden">
+      <div class="flex flex-col gap-2 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"></span>
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+          <span class="ml-2 text-sm font-semibold">Terminal</span>
+          <span class="ml-2 hidden sm:inline text-xs text-slate-500">dummy + final result</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="copyLogsBtn" type="button"
+            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
+            Copy logs
+          </button>
+          <button id="clearBtn" type="button"
+            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div id="terminal" class="h-[44vh] bg-slate-950/80"></div>
+
+      <div class="border-t border-slate-800 bg-slate-950/45 px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
+              <span id="runDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+              <span id="runText" class="font-mono">idle</span>
+            </span>
+            <span class="text-xs text-slate-500" id="runHint">Siap.</span>
+          </div>
+
+          <div class="w-56">
+            <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+              <div id="runBar" class="h-full w-0 bg-indigo-500 transition-all"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <main class="grid gap-4 lg:grid-cols-12">
+      <!-- Config -->
+      <section class="lg:col-span-4 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-semibold">Config</h2>
+          <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
+            <span id="cfgDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
+            <span id="cfgText" class="font-mono">not applied</span>
+          </span>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div>
+            <label class="text-sm text-slate-300">Repo name</label>
+            <input id="repoInput" placeholder="mis: mysite"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            <p id="repoHint" class="mt-1 text-xs text-slate-500">Format: a-z 0-9 . _ -</p>
+          </div>
+
+          <div>
+            <label class="text-sm text-slate-300">Branch</label>
+            <input id="branchInput" value="main"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-slate-300">Deploy key</label>
+              <button id="revealKeyBtn" type="button" class="text-xs text-slate-400 hover:text-slate-200 transition">show</button>
+            </div>
+            <input id="deployKeyInput" type="password" placeholder="wajib (kunci deploy)"
+              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+              autocomplete="off" />
+          </div>
+
+          <div class="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2">
+            <div>
+              <p class="text-sm font-medium">Private repo</p>
+              <p class="text-xs text-slate-500">ON = private, OFF = public</p>
+            </div>
+            <!-- ✅ type button biar gak ke-submit -->
+            <button id="privateToggle" type="button"
+              class="relative inline-flex h-8 w-14 items-center rounded-full bg-indigo-500 transition"
+              aria-pressed="true">
+              <span id="toggleKnob" class="inline-block h-6 w-6 translate-x-7 transform rounded-full bg-white transition"></span>
+            </button>
+          </div>
+
+          <button id="applyBtn" type="button"
+            class="w-full rounded-2xl bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 active:bg-indigo-600 transition">
+            Apply config
+          </button>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">
+            <div class="flex items-center justify-between">
+              <span>Current:</span>
+              <span id="currentCfg" class="font-mono text-slate-200">-</span>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-amber-800/60 bg-amber-500/10 p-3 text-xs text-amber-100">
+            Max ZIP upload: <span class="font-mono">~4.5MB</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ZIP Preview -->
+      <section class="lg:col-span-5 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-semibold">ZIP Preview</h2>
+            <p class="text-xs text-slate-500">Lihat isi ZIP sebelum deploy</p>
+          </div>
+
+          <!-- ✅ Label-for: native picker paling stabil -->
+          <label for="zipInput"
+            class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition cursor-pointer inline-flex items-center justify-center">
+            Choose ZIP
+          </label>
+        </div>
+
+        <div class="mt-4 grid gap-3">
+          <div class="grid gap-2 sm:grid-cols-3">
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Selected</div>
+              <div id="zipName" class="mt-1 text-sm text-slate-200 truncate">No file</div>
+              <div id="zipSize" class="mt-1 text-xs text-slate-500">—</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Files</div>
+              <div id="zipFiles" class="mt-1 text-sm text-slate-200 font-mono">—</div>
+              <div class="mt-1 text-xs text-slate-500">exclude folders</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
+              <div class="text-xs text-slate-500">Top folders</div>
+              <div id="zipTop" class="mt-1 text-sm text-slate-200 font-mono truncate">—</div>
+              <div class="mt-1 text-xs text-slate-500">first-level</div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="w-full sm:max-w-sm">
+              <input id="filterInput" placeholder="Filter path... (mis: src/)"
+                class="w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500"
+                disabled />
+              <div id="filterHint" class="mt-1 text-xs text-slate-500">Pilih ZIP dulu.</div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button id="expandAllBtn" type="button"
+                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled>Expand</button>
+              <button id="collapseAllBtn" type="button"
+                class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled>Collapse</button>
+            </div>
+          </div>
+
+          <div class="rounded-[22px] border border-slate-800 bg-slate-950/45">
+            <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div class="text-sm font-semibold">Structure</div>
+              <div id="previewStatus" class="text-xs text-slate-500">—</div>
+            </div>
+            <div id="treeWrap" class="nice-scroll max-h-[340px] overflow-auto px-2 py-2">
+              <div class="px-3 py-6 text-center text-sm text-slate-500">
+                Select a ZIP to preview its contents.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Deploy -->
+      <section class="lg:col-span-3 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
+        <div>
+          <h2 class="text-base font-semibold">Deploy</h2>
+          <p class="text-xs text-slate-500">Confirm dulu, baru push</p>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-sm">
+            <div class="flex items-center justify-between text-xs text-slate-500">
+              <span>Ready checks</span>
+              <span id="checksBadge"
+                class="rounded-full border border-slate-800 bg-slate-950/40 px-2 py-0.5 text-slate-300">0/3</span>
+            </div>
+
+            <div class="mt-3 space-y-2 text-sm">
+              <div class="flex items-center gap-2">
+                <span id="chkCfg" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>Config applied</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="chkZip" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>ZIP selected & previewed</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="chkKey" class="h-2 w-2 rounded-full bg-slate-600"></span>
+                <span>Deploy key filled</span>
+              </div>
+            </div>
+          </div>
+
+          <button id="deployBtn" type="button"
+            class="w-full rounded-2xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-400 active:bg-emerald-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled>
+            Deploy
+          </button>
+
+          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-xs text-slate-500">
+            Upload ZIP → Extract → Commit + Push
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- offscreen input -->
+  <input id="zipInput" type="file" accept=".zip"
+    style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0;" />
+
+  <div id="toastHost" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+  <!-- App -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
