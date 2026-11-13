@@ -1,131 +1,58 @@
 import Busboy from "busboy";
 import JSZip from "jszip";
 import { assertDeployKey } from "./_lib/auth.js";
-import {
-  ensureRepo, getDefaultBranch, getRefSha, createBranch,
-  getCommit, createBlob, createTree, createCommitObj, updateRef
-} from "./_lib/gh.js";
+import { pushZip } from "./_lib/gh.js";
 
-function toB64(buf) {
-  return Buffer.from(buf).toString("base64");
-}
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
     assertDeployKey(req);
-
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const repo = url.searchParams.get("repo");
+    const url = new URL(req.url, "https://" + (req.headers.host || "localhost"));
+    const [ownerFromEnv, repoEnv] = (process.env.GITHUB_OWNER || "").split("/");
+    const target = url.searchParams.get("repo") || repoEnv;
     const branch = url.searchParams.get("branch") || "main";
-    const makePrivate = (url.searchParams.get("private") || "true") === "true";
-
-    if (!repo) return res.status(400).json({ error: "Missing ?repo=" });
-
-    await ensureRepo({ repo, makePrivate });
-
-    // Parse multipart form-data (field name: zip)
-    const bb = Busboy({
-      headers: req.headers,
-      limits: { files: 1 } // Vercel payload limit still applies
-    });
-
-    let zipBuf = null;
-
+    const [owner, repo] = target.includes("/") ? target.split("/") : [ownerFromEnv, target];
+    if (!owner || !repo || !/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
+      return res.status(400).json({ error: "Repository harus format owner/name" });
+    }
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.includes("..")) return res.status(400).json({ error: "Invalid branch" });
+    const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: 4 * 1024 * 1024 } });
+    let zipBuffer, message = "Upload project files", tooLarge = false;
     await new Promise((resolve, reject) => {
-      bb.on("file", (name, file, info) => {
+      bb.on("field", (name, value) => { if (name === "message") message = value.slice(0, 200); });
+      bb.on("file", (name, file) => {
+        if (name !== "zip") { file.resume(); return; }
         const chunks = [];
-        file.on("data", (d) => chunks.push(d));
-        file.on("end", () => { zipBuf = Buffer.concat(chunks); });
+        file.on("data", chunk => chunks.push(chunk));
+        file.on("limit", () => { tooLarge = true; });
+        file.on("end", () => { zipBuffer = Buffer.concat(chunks); });
         file.on("error", reject);
       });
-      bb.on("finish", resolve);
       bb.on("error", reject);
+      bb.on("finish", resolve);
       req.pipe(bb);
     });
-
-    if (!zipBuf) return res.status(400).json({ error: "No zip file found (field: zip)" });
-
-    // Unzip and gather files
-    const zip = await JSZip.loadAsync(zipBuf);
-
+    if (tooLarge) return res.status(413).json({ error: "ZIP melebihi 4 MB" });
+    if (!zipBuffer) return res.status(400).json({ error: "ZIP file tidak ditemukan" });
+    const zip = await JSZip.loadAsync(zipBuffer);
     const files = [];
-    const warnings = [];
-
-    zip.forEach((path, entry) => {
-      if (entry.dir) return;
-      const p = path.replace(/\\/g, "/").replace(/^\/+/, "");
-      if (!p) return;
-      if (p.startsWith(".git/")) return;
-
-      files.push({ path: p, entry });
-
-      const lower = p.toLowerCase();
-      if (
-        lower === ".env" || lower.endsWith("/.env") ||
-        lower.includes("id_rsa") ||
-        lower.includes("private_key") ||
-        lower.includes("serviceaccount") ||
-        lower.endsWith(".p12")
-      ) {
-        warnings.push(`Sensitive-looking file: ${p}`);
-      }
-    });
-
-    if (!files.length) return res.status(400).json({ error: "ZIP contains no files" });
-
-    // Guard biar nggak kebablasan di serverless
-    const MAX_FILES = 1200;
-    if (files.length > MAX_FILES) {
-      return res.status(413).json({ error: `Too many files (${files.length}). Limit ${MAX_FILES}.` });
+    let totalBytes = 0;
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      const clean = path.replace(/\\/g, "/").replace(/^\/+/, "");
+      if (!clean || clean.startsWith(".git/") || clean.split("/").includes("..")) continue;
+      const content = await entry.async("nodebuffer");
+      totalBytes += content.length;
+      if (totalBytes > 18 * 1024 * 1024) return res.status(413).json({ error: "Ukuran hasil ekstrak melebihi 18 MB" });
+      files.push([clean, content]);
     }
-
-    // Resolve base commit (create branch if missing)
-    let baseSha;
-    try {
-      baseSha = await getRefSha(repo, branch);
-    } catch (e) {
-      if (e.statusCode !== 404) throw e;
-      const def = await getDefaultBranch(repo);
-      const defSha = await getRefSha(repo, def);
-      await createBranch(repo, branch, defSha);
-      baseSha = await getRefSha(repo, branch);
-    }
-
-    const baseCommit = await getCommit(repo, baseSha);
-    const baseTreeSha = baseCommit.tree.sha;
-
-    // Create blobs and tree entries
-    const treeEntries = [];
-
-    for (const f of files) {
-      const content = await f.entry.async("nodebuffer");
-      const blob = await createBlob(repo, toB64(content));
-      treeEntries.push({
-        path: f.path,
-        mode: "100644",
-        type: "blob",
-        sha: blob.sha
-      });
-    }
-
-    // Create new tree and commit, then update ref
-    const newTree = await createTree(repo, baseTreeSha, treeEntries);
-    const msg = `Deploy from WebGit (${new Date().toISOString()})`;
-    const newCommit = await createCommitObj(repo, msg, newTree.sha, baseSha);
-
-    await updateRef(repo, branch, newCommit.sha);
-
-    return res.status(200).json({
-      ok: true,
-      owner: process.env.GITHUB_OWNER,
-      repo,
-      branch,
-      files: files.length,
-      commit: newCommit.sha,
-      warnings
-    });
-  } catch (e) {
-    return res.status(e.statusCode || 500).json({ error: e.message, details: e.details });
+    if (!files.length) return res.status(400).json({ error: "ZIP tidak berisi file yang dapat diupload" });
+    if (files.length > 400) return res.status(413).json({ error: "Maksimal 400 file per upload" });
+    const result = await pushZip({ owner, repo, branch, entries: files, message: message || "Upload project files", overwrite: url.searchParams.get("overwrite") !== "false" });
+    return res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ error: error.message, details: error.details });
   }
 }

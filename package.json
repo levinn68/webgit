@@ -1,5 +1,5 @@
 {
-  "name": "webgit-vercel",
+  "name": "webgit-uploader",
   "private": true,
   "type": "module",
   "dependencies": {

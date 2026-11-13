@@ -1,112 +1,60 @@
 const API = "https://api.github.com";
 
-function mustEnv() {
-  if (!process.env.GITHUB_TOKEN) throw Object.assign(new Error("GITHUB_TOKEN not set"), { statusCode: 500 });
-  if (!process.env.GITHUB_OWNER) throw Object.assign(new Error("GITHUB_OWNER not set"), { statusCode: 500 });
+function env(name) {
+  const value = process.env[name];
+  if (!value) throw Object.assign(new Error(name + " is not configured"), { statusCode: 500 });
+  return value;
 }
 
-async function gh(path, { method = "GET", body } = {}) {
-  mustEnv();
-
-  const res = await fetch(API + path, {
-    method,
+async function request(path, options = {}) {
+  const response = await fetch(API + path, {
+    ...options,
     headers: {
-      "Accept": "application/vnd.github+json",
-      "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      Authorization: "Bearer " + env("GITHUB_TOKEN"),
       "X-GitHub-Api-Version": "2022-11-28",
-      ...(body ? { "Content-Type": "application/json" } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined
-  });
-
-  const text = await res.text();
-  const json = text ? (() => { try { return JSON.parse(text); } catch { return { raw: text }; } })() : {};
-  if (!res.ok) {
-    const e = new Error(json?.message || res.statusText || "GitHub API error");
-    e.statusCode = res.status;
-    e.details = json;
-    throw e;
-  }
-  return json;
-}
-
-const OWNER = () => process.env.GITHUB_OWNER;
-const OWNER_TYPE = () => process.env.GITHUB_OWNER_TYPE || "user";
-
-export async function ensureRepo({ repo, makePrivate }) {
-  let existing = null;
-
-  try {
-    existing = await gh(`/repos/${OWNER()}/${repo}`);
-  } catch (e) {
-    if (e.statusCode !== 404) throw e;
-  }
-
-  if (!existing) {
-    const payload = { name: repo, private: !!makePrivate, auto_init: true };
-
-    if (OWNER_TYPE() === "org") {
-      await gh(`/orgs/${OWNER()}/repos`, { method: "POST", body: payload });
-    } else {
-      await gh(`/user/repos`, { method: "POST", body: payload });
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers
     }
-    return;
-  }
+  });
+  const raw = await response.text();
+  const data = raw ? JSON.parse(raw) : {};
+  if (!response.ok) throw Object.assign(new Error(data.message || "GitHub API error"), { statusCode: response.status, details: data });
+  return data;
+}
 
-  // ✅ sync visibility if needed (token harus punya admin permission)
-  if (typeof makePrivate === "boolean" && existing.private !== !!makePrivate) {
-    await gh(`/repos/${OWNER()}/${repo}`, {
-      method: "PATCH",
-      body: { private: !!makePrivate }
+export async function pushZip({ owner, repo, branch, entries, message, overwrite }) {
+  const repoPath = "/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(repo);
+  const meta = await request(repoPath);
+  const refPath = repoPath + "/git/ref/heads/" + branch.split("/").map(encodeURIComponent).join("/");
+  let parentSha;
+  try {
+    parentSha = (await request(refPath)).object.sha;
+  } catch (error) {
+    if (error.statusCode !== 404) throw error;
+    const defaultSha = (await request(repoPath + "/git/ref/heads/" + encodeURIComponent(meta.default_branch))).object.sha;
+    await request(repoPath + "/git/refs", { method: "POST", body: JSON.stringify({ ref: "refs/heads/" + branch, sha: defaultSha }) });
+    parentSha = defaultSha;
+  }
+  const parent = await request(repoPath + "/git/commits/" + parentSha);
+  const tree = [];
+  for (const [path, bytes] of entries) {
+    const blob = await request(repoPath + "/git/blobs", {
+      method: "POST",
+      body: JSON.stringify({ content: bytes.toString("base64"), encoding: "base64" })
     });
+    tree.push({ path, mode: "100644", type: "blob", sha: blob.sha });
   }
-}
-
-export async function getDefaultBranch(repo) {
-  const r = await gh(`/repos/${OWNER()}/${repo}`);
-  return r.default_branch;
-}
-
-export async function getRefSha(repo, branch) {
-  const ref = await gh(`/repos/${OWNER()}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
-  return ref.object.sha;
-}
-
-export async function createBranch(repo, branch, fromSha) {
-  await gh(`/repos/${OWNER()}/${repo}/git/refs`, {
+  const newTree = await request(repoPath + "/git/trees", {
     method: "POST",
-    body: { ref: `refs/heads/${branch}`, sha: fromSha }
+    body: JSON.stringify({ base_tree: overwrite ? parent.tree.sha : undefined, tree })
   });
-}
-
-export async function getCommit(repo, sha) {
-  return gh(`/repos/${OWNER()}/${repo}/git/commits/${sha}`);
-}
-
-export async function createBlob(repo, base64Content) {
-  return gh(`/repos/${OWNER()}/${repo}/git/blobs`, {
+  const commit = await request(repoPath + "/git/commits", {
     method: "POST",
-    body: { content: base64Content, encoding: "base64" }
+    body: JSON.stringify({ message, tree: newTree.sha, parents: [parentSha] })
   });
-}
-
-export async function createTree(repo, baseTreeSha, entries) {
-  return gh(`/repos/${OWNER()}/${repo}/git/trees`, {
-    method: "POST",
-    body: { base_tree: baseTreeSha, tree: entries }
+  await request(repoPath + "/git/refs/heads/" + branch.split("/").map(encodeURIComponent).join("/"), {
+    method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false })
   });
-}
-
-export async function createCommitObj(repo, message, treeSha, parentSha) {
-  return gh(`/repos/${OWNER()}/${repo}/git/commits`, {
-    method: "POST",
-    body: { message, tree: treeSha, parents: [parentSha] }
-  });
-}
-
-export async function updateRef(repo, branch, sha) {
-  return gh(`/repos/${OWNER()}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
-    method: "PATCH",
-    body: { sha, force: true }
-  });
+  return { owner, repo, branch, files: entries.length, commit: commit.sha };
 }

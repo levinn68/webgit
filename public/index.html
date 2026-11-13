@@ -1,273 +1,30 @@
 <!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WebGit Deployer</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Stable CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.5.0/xterm.js"></script>
-
-  <style>
-    :root { color-scheme: dark; }
-    body { font-family: Inter, ui-sans-serif, system-ui; }
-
-    .bg-grid {
-      background-image:
-        radial-gradient(circle at 18% 20%, rgba(99,102,241,.18) 0, transparent 55%),
-        radial-gradient(circle at 82% 24%, rgba(34,211,238,.14) 0, transparent 60%),
-        radial-gradient(circle at 50% 88%, rgba(16,185,129,.10) 0, transparent 55%),
-        linear-gradient(to bottom, rgba(2,6,23,1), rgba(2,6,23,.92));
-    }
-    .noise::before{
-      content:"";
-      position:fixed; inset:0;
-      pointer-events:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
-      mix-blend-mode:overlay;
-      opacity:.35;
-    }
-    .nice-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
-    .nice-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.22); border-radius: 999px; }
-    .nice-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.32); }
-    .xterm { padding: 14px; }
-    .xterm-viewport { border-radius: 18px; }
-  </style>
-</head>
-
-<body class="bg-grid noise min-h-screen text-slate-100">
-  <div class="mx-auto max-w-6xl px-4 py-6 space-y-4">
-
-    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex items-center gap-3">
-        <div class="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-cyan-400 to-emerald-400 shadow-lg shadow-indigo-500/20"></div>
-        <div class="leading-tight">
-          <h1 class="text-xl font-semibold tracking-tight">WebGit Deployer</h1>
-          <p class="text-sm text-slate-400">Vercel only • ZIP ≤ 4.5MB • Dummy terminal</p>
-        </div>
-      </div>
-
-      <span id="cfgPill" class="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/40 px-3 py-1 text-xs text-slate-300">
-        <span id="cfgPillDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
-        <span id="cfgPillText" class="font-mono">no config</span>
-      </span>
-    </header>
-
-    <!-- Terminal -->
-    <section class="rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl shadow-sm overflow-hidden">
-      <div class="flex flex-col gap-2 border-b border-slate-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-center gap-2">
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-rose-500"></span>
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-400"></span>
-          <span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-          <span class="ml-2 text-sm font-semibold">Terminal</span>
-          <span class="ml-2 hidden sm:inline text-xs text-slate-500">dummy + final result</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button id="copyLogsBtn" type="button"
-            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
-            Copy logs
-          </button>
-          <button id="clearBtn" type="button"
-            class="rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300 hover:bg-slate-900 transition">
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div id="terminal" class="h-[44vh] bg-slate-950/80"></div>
-
-      <div class="border-t border-slate-800 bg-slate-950/45 px-4 py-3">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
-              <span id="runDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
-              <span id="runText" class="font-mono">idle</span>
-            </span>
-            <span class="text-xs text-slate-500" id="runHint">Siap.</span>
-          </div>
-
-          <div class="w-56">
-            <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-              <div id="runBar" class="h-full w-0 bg-indigo-500 transition-all"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <main class="grid gap-4 lg:grid-cols-12">
-      <!-- Config -->
-      <section class="lg:col-span-4 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
-        <div class="flex items-center justify-between">
-          <h2 class="text-base font-semibold">Config</h2>
-          <span class="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/40 px-3 py-1 text-xs text-slate-300">
-            <span id="cfgDot" class="inline-block h-1.5 w-1.5 rounded-full bg-slate-500"></span>
-            <span id="cfgText" class="font-mono">not applied</span>
-          </span>
-        </div>
-
-        <div class="mt-4 space-y-3">
-          <div>
-            <label class="text-sm text-slate-300">Repo name</label>
-            <input id="repoInput" placeholder="mis: mysite"
-              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-            <p id="repoHint" class="mt-1 text-xs text-slate-500">Format: a-z 0-9 . _ -</p>
-          </div>
-
-          <div>
-            <label class="text-sm text-slate-300">Branch</label>
-            <input id="branchInput" value="main"
-              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between">
-              <label class="text-sm text-slate-300">Deploy key</label>
-              <button id="revealKeyBtn" type="button" class="text-xs text-slate-400 hover:text-slate-200 transition">show</button>
-            </div>
-            <input id="deployKeyInput" type="password" placeholder="wajib (kunci deploy)"
-              class="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              autocomplete="off" />
-          </div>
-
-          <div class="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2">
-            <div>
-              <p class="text-sm font-medium">Private repo</p>
-              <p class="text-xs text-slate-500">ON = private, OFF = public</p>
-            </div>
-            <button id="privateToggle" type="button"
-              class="relative inline-flex h-8 w-14 items-center rounded-full bg-indigo-500 transition"
-              aria-pressed="true">
-              <span id="toggleKnob" class="inline-block h-6 w-6 translate-x-7 transform rounded-full bg-white transition"></span>
-            </button>
-          </div>
-
-          <button id="applyBtn" type="button"
-            class="w-full rounded-2xl bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 active:bg-indigo-600 transition">
-            Apply config
-          </button>
-
-          <div class="rounded-2xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-400">
-            <div class="flex items-center justify-between">
-              <span>Current:</span>
-              <span id="currentCfg" class="font-mono text-slate-200">-</span>
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-amber-800/60 bg-amber-500/10 p-3 text-xs text-amber-100">
-            Max ZIP upload: <span class="font-mono">~4.5MB</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- ZIP Preview -->
-      <section class="lg:col-span-5 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-semibold">ZIP Preview</h2>
-            <p class="text-xs text-slate-500">Lihat isi ZIP sebelum deploy</p>
-          </div>
-
-          <label for="zipInput"
-            class="rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 transition cursor-pointer inline-flex items-center justify-center">
-            Choose ZIP
-          </label>
-        </div>
-
-        <div class="mt-4 grid gap-3">
-          <div class="grid gap-2 sm:grid-cols-3">
-            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
-              <div class="text-xs text-slate-500">Selected</div>
-              <div id="zipName" class="mt-1 text-sm text-slate-200 truncate">No file</div>
-              <div id="zipSize" class="mt-1 text-xs text-slate-500">—</div>
-            </div>
-            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
-              <div class="text-xs text-slate-500">Files</div>
-              <div id="zipFiles" class="mt-1 text-sm text-slate-200 font-mono">—</div>
-              <div class="mt-1 text-xs text-slate-500">exclude folders</div>
-            </div>
-            <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3">
-              <div class="text-xs text-slate-500">Top folders</div>
-              <div id="zipTop" class="mt-1 text-sm text-slate-200 font-mono truncate">—</div>
-              <div class="mt-1 text-xs text-slate-500">first-level</div>
-            </div>
-          </div>
-
-          <div class="rounded-[22px] border border-slate-800 bg-slate-950/45">
-            <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-              <div class="text-sm font-semibold">Structure</div>
-              <div id="previewStatus" class="text-xs text-slate-500">—</div>
-            </div>
-            <div id="treeWrap" class="nice-scroll max-h-[340px] overflow-auto px-2 py-2">
-              <div class="px-3 py-6 text-center text-sm text-slate-500">
-                Select a ZIP to preview its contents.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Deploy -->
-      <section class="lg:col-span-3 rounded-[22px] border border-slate-800 bg-slate-900/35 backdrop-blur-xl p-4 shadow-sm">
-        <div>
-          <h2 class="text-base font-semibold">Deploy</h2>
-          <p class="text-xs text-slate-500">Confirm dulu, baru push</p>
-        </div>
-
-        <div class="mt-4 space-y-3">
-          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-sm">
-            <div class="flex items-center justify-between text-xs text-slate-500">
-              <span>Ready checks</span>
-              <span id="checksBadge"
-                class="rounded-full border border-slate-800 bg-slate-950/40 px-2 py-0.5 text-slate-300">0/3</span>
-            </div>
-
-            <div class="mt-3 space-y-2 text-sm">
-              <div class="flex items-center gap-2">
-                <span id="chkCfg" class="h-2 w-2 rounded-full bg-slate-600"></span>
-                <span>Config applied</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span id="chkZip" class="h-2 w-2 rounded-full bg-slate-600"></span>
-                <span>ZIP selected & previewed</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span id="chkKey" class="h-2 w-2 rounded-full bg-slate-600"></span>
-                <span>Deploy key filled</span>
-              </div>
-            </div>
-          </div>
-
-          <button id="deployBtn" type="button"
-            class="w-full rounded-2xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-400 active:bg-emerald-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled>
-            Deploy
-          </button>
-
-          <div class="rounded-2xl border border-slate-800 bg-slate-950/35 p-3 text-xs text-slate-500">
-            Upload ZIP → Extract → Commit + Push
-          </div>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <!-- offscreen input -->
-  <input id="zipInput" type="file" accept=".zip"
-    style="position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0;" />
-
-  <div id="toastHost" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
-
-  <script type="module" src="/js/app.js"></script>
-</body>
-</html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WebGit • ZIP to GitHub</title>
+<script src="https://cdn.tailwindcss.com"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:Inter,ui-sans-serif,system-ui;background:#070a12;color:#e8edf8;background-image:radial-gradient(ellipse at 12% 0%,#23346b55,transparent 42%),radial-gradient(ellipse at 100% 30%,#0e749055,transparent 38%)}
+.glass{background:#101827bb;border:1px solid #ffffff15;backdrop-filter:blur(20px);box-shadow:0 18px 60px #0005}.drop{border:1px dashed #64748b80;background:#0a1220}.drop.drag{border-color:#67e8f9;background:#0e749022}.btn{background:linear-gradient(110deg,#6366f1,#0891b2);transition:.2s}.btn:hover{filter:brightness(1.13);transform:translateY(-1px)}input{background:#080f1c;border:1px solid #ffffff18;outline:none}input:focus{border-color:#67e8f9}.mono{font-family:ui-monospace,SFMono-Regular,monospace}.file{color:#b9c7dc}
+</style></head><body class="min-h-screen p-4 sm:p-8">
+<div class="max-w-5xl mx-auto space-y-6">
+<header class="flex items-center justify-between gap-3"><div class="flex items-center gap-3"><div class="w-11 h-11 rounded-2xl btn grid place-items-center text-xl font-bold">W</div><div><div class="text-xl font-bold tracking-tight">WebGit <span class="text-cyan-300">Uploader</span></div><div class="text-xs text-slate-400">ZIP → GitHub repository</div></div></div><a class="text-xs text-slate-400 hover:text-white" href="https://github.com/levinn68/webgit" target="_blank">GitHub ↗</a></header>
+<section class="glass rounded-3xl p-5 sm:p-7"><div class="flex items-start justify-between gap-3"><div><div class="text-sm text-cyan-300 font-semibold">DEPLOY WORKSPACE</div><h1 class="text-2xl sm:text-3xl font-bold mt-2">Upload folder ZIP ke GitHub.</h1><p class="text-sm text-slate-400 mt-2">Ekstrak otomatis, cek struktur, lalu simpan sebagai satu commit.</p></div><div class="hidden sm:block rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs text-cyan-200">● Ready</div></div>
+<div class="grid sm:grid-cols-2 gap-3 mt-6"><label class="text-xs text-slate-400">Repository <input id="repo" class="mt-2 w-full rounded-xl px-3 py-3 text-sm" placeholder="owner/repository" value="levinn68/webgit"></label><label class="text-xs text-slate-400">Branch <input id="branch" class="mt-2 w-full rounded-xl px-3 py-3 text-sm" value="main"></label></div>
+<label id="drop" class="drop rounded-2xl mt-5 min-h-44 flex flex-col items-center justify-center text-center p-5 cursor-pointer"><input id="zip" type="file" accept=".zip" class="hidden"><div class="w-12 h-12 rounded-2xl bg-cyan-300/10 text-cyan-200 grid place-items-center text-2xl">↑</div><div class="font-semibold mt-3">Pilih ZIP atau tarik file ke sini</div><div class="text-xs text-slate-500 mt-1">.zip • maksimal 4 MB untuk endpoint serverless ini</div><div id="filename" class="text-xs text-cyan-200 mt-3"></div></label>
+<div class="flex flex-wrap items-center justify-between gap-2 mt-4"><div class="flex gap-4 text-xs text-slate-400"><span><b id="count" class="text-white">0</b> file</span><span><b id="size" class="text-white">0 B</b></span></div><label class="flex items-center gap-2 text-xs text-slate-400"><input id="overwrite" type="checkbox" checked class="accent-cyan-400"> Gabungkan dengan isi repo, file sama ditimpa</label></div>
+<div class="mt-4 rounded-2xl bg-black/25 border border-white/10 overflow-hidden"><div class="px-4 py-3 border-b border-white/10 flex justify-between text-xs"><span class="font-semibold">ZIP structure</span><span id="status" class="text-slate-500">Belum ada file</span></div><div id="tree" class="p-3 max-h-64 overflow-auto text-xs mono text-slate-300">Pilih file ZIP untuk melihat struktur folder.</div></div>
+<div class="grid sm:grid-cols-[1fr_auto] gap-3 mt-5"><input id="message" class="rounded-xl px-3 py-3 text-sm" value="Upload project files" aria-label="Commit message"><button id="upload" class="btn rounded-xl px-6 py-3 font-semibold text-sm disabled:opacity-40" disabled>Upload ke GitHub ↗</button></div>
+<p class="text-[11px] text-slate-500 mt-3">Uploader akan memakai token server-side. Jangan masukkan token GitHub ke halaman ini.</p></section>
+<section class="glass rounded-3xl p-5"><div class="flex justify-between items-center"><h2 class="font-semibold">Activity</h2><span id="badge" class="text-xs text-slate-500">Idle</span></div><div class="h-1.5 bg-white/10 rounded-full mt-4 overflow-hidden"><div id="bar" class="h-full bg-cyan-400 w-0 transition-all"></div></div><pre id="log" class="mono text-xs text-slate-400 whitespace-pre-wrap mt-4 min-h-16">Ready. Pilih ZIP untuk mulai.</pre></section>
+<footer class="text-center text-xs text-slate-600">WebGit • Secure server-side GitHub API</footer></div>
+<script>
+const $=id=>document.getElementById(id);let selected=null,zipEntries=[];
+const fmt=n=>n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+function log(s){$('log').textContent+= '\n'+s}function progress(p,s){$('bar').style.width=p+'%';$('badge').textContent=s}
+function safe(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function inspect(file){if(!file)return;if(!file.name.toLowerCase().endsWith('.zip'))throw Error('File harus ZIP');if(file.size>4*1024*1024)throw Error('ZIP maksimal 4 MB pada konfigurasi ini');selected=file;$('filename').textContent=file.name+' • '+fmt(file.size);$('size').textContent=fmt(file.size);$('status').textContent='Membaca ZIP…';const z=await JSZip.loadAsync(await file.arrayBuffer());zipEntries=[];z.forEach((p,e)=>{p=p.replaceAll('\\','/').replace(/^\/+/, '');if(!e.dir&&p&&!p.startsWith('.git/'))zipEntries.push(p)});if(!zipEntries.length)throw Error('ZIP kosong');if(zipEntries.length>1000)throw Error('Maksimal 1000 file');$('count').textContent=zipEntries.length;$('status').textContent=zipEntries.length+' files';$('tree').innerHTML=zipEntries.slice(0,300).map(p=>'<div class="py-1 file">▰ '+safe(p)+'</div>').join('')+(zipEntries.length>300?'<div class="text-slate-500 mt-2">Preview dibatasi 300 file…</div>':'');$('upload').disabled=false;progress(0,'ZIP ready');log('ZIP loaded: '+zipEntries.length+' files')}
+$('zip').addEventListener('change',e=>inspect(e.target.files[0]).catch(e=>log('ERROR: '+e.message)));
+$('drop').addEventListener('dragover',e=>{e.preventDefault();$('drop').classList.add('drag')});$('drop').addEventListener('dragleave',()=>$('drop').classList.remove('drag'));$('drop').addEventListener('drop',e=>{e.preventDefault();$('drop').classList.remove('drag');inspect(e.dataTransfer.files[0]).catch(e=>log('ERROR: '+e.message))});
+$('upload').onclick=async()=>{try{if(!selected)throw Error('Pilih ZIP dahulu');const repo=$('repo').value.trim(),branch=$('branch').value.trim(),message=$('message').value.trim();if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))throw Error('Repo harus format owner/name');if(!/^[A-Za-z0-9._/-]+$/.test(branch)||branch.includes('..'))throw Error('Nama branch tidak valid');if(!message)throw Error('Commit message wajib diisi');
+$('upload').disabled=true;$('log').textContent='Starting upload…';progress(12,'Uploading');const fd=new FormData();fd.append('zip',selected,selected.name);fd.append('message',message);fd.append('overwrite',$('overwrite').checked?'true':'false');
+const res=await fetch('/api/upload?repo='+encodeURIComponent(repo)+'&branch='+encodeURIComponent(branch),{method:'POST',body:fd});progress(88,'Committing');const data=await res.json();if(!res.ok||!data.ok)throw Error(data.error||'Upload gagal');progress(100,'Success');log('✓ Commit berhasil');log('Repository: '+data.owner+'/'+data.repo);log('Branch: '+data.branch);log('Files: '+data.files);log('Commit: '+data.commit);log('https://github.com/'+data.owner+'/'+data.repo+'/tree/'+encodeURIComponent(data.branch));}catch(e){progress(0,'Failed');log('ERROR: '+e.message)}finally{$('upload').disabled=!selected}};
+</script></body></html>
