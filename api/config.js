@@ -1,24 +1,2 @@
-import { assertDeployKey } from "./_lib/auth.js";
-import { ensureRepo } from "./_lib/gh.js";
-
-export default async function handler(req, res) {
-  try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-    assertDeployKey(req);
-
-    const { repo, branch = "main", makePrivate = true } = req.body || {};
-    if (!repo || typeof repo !== "string") return res.status(400).json({ error: "repo required" });
-
-    await ensureRepo({ repo, makePrivate });
-
-    return res.status(200).json({
-      ok: true,
-      owner: process.env.GITHUB_OWNER,
-      repo,
-      branch,
-      makePrivate: !!makePrivate
-    });
-  } catch (e) {
-    return res.status(e.statusCode || 500).json({ error: e.message, details: e.details });
-  }
-}
+import {assertDeployKey} from "./_lib/auth.js";import {getRepo} from "./_lib/gh.js";
+export default async function handler(req,res){try{if(req.method!=="POST")return res.status(405).json({error:"Method not allowed"});assertDeployKey(req);const{repo}=req.body||{};if(!repo||typeof repo!=="string"||! /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo))return res.status(400).json({error:"Repository harus format owner/name."});const[owner,name]=repo.split("/");const meta=await getRepo({owner,repo:name});if(meta.permissions?.push===false)return res.status(403).json({error:"Tidak punya izin push ke repository ini."});return res.status(200).json({ok:true,owner,repo:name,full_name:meta.full_name,branch:meta.default_branch||"main",private:!!meta.private,empty:!meta.default_branch});}catch(e){return res.status(e.statusCode||500).json({error:e.message,details:e.details});}}
