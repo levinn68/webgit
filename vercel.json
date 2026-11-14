@@ -6,6 +6,6 @@
     "api/create-repo.js": { "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/", "destination": "/index.html" }
+    { "source": "/", "destination": "/login.html" }
   ]
 }

@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id);
 const state = { mode: "existing", repos: [], page: 1, hasMore: false, selected: null, file: null, paths: [], busy: false, toastTimer: null };
 const terminal = $("terminalLines");
+const savedAccessKey = sessionStorage.getItem("webgit_access_key") || "";
+if (savedAccessKey) $("deployKey").value = savedAccessKey;
 
 function escapeText(value) { return String(value ?? ""); }
 function fmtBytes(bytes) {
@@ -447,4 +449,4 @@ $("upload").addEventListener("click", async () => {
 });
 
 setMode("existing");
-log("Workspace ready. Enter password to load repositories.", "READY");
+log("Workspace ready. Unlock to continue.", "READY");
