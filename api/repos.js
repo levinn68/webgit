@@ -1,0 +1,2 @@
+import {assertDeployKey} from "./_lib/auth.js";import {listRepos} from "./_lib/gh.js";
+export default async function handler(req,res){try{if(req.method!=="GET")return res.status(405).json({error:"Method not allowed"});assertDeployKey(req);const page=Number(req.query?.page||1);const repos=await listRepos({page,perPage:100});return res.status(200).json({ok:true,repos,page,hasMore:repos.length===100});}catch(e){return res.status(e.statusCode||500).json({error:e.message,details:e.details});}}
