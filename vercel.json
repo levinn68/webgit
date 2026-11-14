@@ -1,11 +1,19 @@
 {
   "functions": {
-    "api/upload.js": { "maxDuration": 60 },
-    "api/config.js": { "maxDuration": 30 },
-    "api/repos.js": { "maxDuration": 30 },
-    "api/create-repo.js": { "maxDuration": 30 }
-  },
-  "rewrites": [
-    { "source": "/", "destination": "/login.html" }
-  ]
+    "api/upload.js": {
+      "maxDuration": 60
+    },
+    "api/config.js": {
+      "maxDuration": 30
+    },
+    "api/repos.js": {
+      "maxDuration": 30
+    },
+    "api/create-repo.js": {
+      "maxDuration": 30
+    },
+    "api/auth-check.js": {
+      "maxDuration": 30
+    }
+  }
 }
