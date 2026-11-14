@@ -80,29 +80,44 @@ export async function pushZip({ owner, repo, branch, entries, message, onProgres
   }
 
   const refPath = repoPath + "/git/ref/heads/" + encodePath(targetBranch);
-  let parentSha;
+  let parentSha = null;
+  let branchExists = false;
+
   try {
     parentSha = (await request(refPath)).object.sha;
+    branchExists = true;
   } catch (error) {
     if (error.statusCode !== 404) throw error;
-    if (!metadata.default_branch) {
-      throw Object.assign(new Error("Repository kosong. Buat repository dengan README atau inisialisasi branch terlebih dahulu."), { statusCode: 409 });
+
+    // An empty repository has no branch ref yet. Reuse the default branch
+    // only if it exists; otherwise create the first root commit.
+    if (metadata.default_branch && targetBranch !== metadata.default_branch) {
+      try {
+        parentSha = (await request(repoPath + "/git/ref/heads/" + encodePath(metadata.default_branch))).object.sha;
+      } catch (defaultError) {
+        if (defaultError.statusCode !== 404) throw defaultError;
+      }
     }
-    parentSha = (await request(repoPath + "/git/ref/heads/" + encodePath(metadata.default_branch))).object.sha;
-    if (targetBranch !== metadata.default_branch) {
+
+    if (parentSha) {
       try {
         await request(repoPath + "/git/refs", {
           method: "POST",
           body: JSON.stringify({ ref: "refs/heads/" + targetBranch, sha: parentSha })
         });
+        branchExists = true;
       } catch (createError) {
         if (createError.statusCode !== 422) throw createError;
         parentSha = (await request(refPath)).object.sha;
+        branchExists = true;
       }
     }
   }
 
-  const parentCommit = await request(repoPath + "/git/commits/" + parentSha);
+  const parentCommit = parentSha
+    ? await request(repoPath + "/git/commits/" + parentSha)
+    : null;
+
   const treeEntries = [];
   let completed = 0;
   const total = entries.length;
@@ -133,7 +148,7 @@ export async function pushZip({ owner, repo, branch, entries, message, onProgres
   onProgress({ progress: 84, label: "BUILDING COMMIT", message: "All file blobs stored. Building repository tree." });
   const newTree = await request(repoPath + "/git/trees", {
     method: "POST",
-    body: JSON.stringify({ base_tree: parentCommit.tree.sha, tree: treeEntries })
+    body: JSON.stringify(parentCommit ? { base_tree: parentCommit.tree.sha, tree: treeEntries } : { tree: treeEntries })
   });
 
   onProgress({ progress: 91, label: "CREATING COMMIT", message: "Creating a single Git commit." });
@@ -142,15 +157,22 @@ export async function pushZip({ owner, repo, branch, entries, message, onProgres
     body: JSON.stringify({
       message: message || "Upload project files",
       tree: newTree.sha,
-      parents: [parentSha]
+      parents: parentSha ? [parentSha] : []
     })
   });
 
   onProgress({ progress: 96, label: "UPDATING BRANCH", message: "Updating " + targetBranch + " without force push." });
-  await request(repoPath + "/git/refs/heads/" + encodePath(targetBranch), {
-    method: "PATCH",
-    body: JSON.stringify({ sha: commit.sha, force: false })
-  });
+  if (branchExists) {
+    await request(repoPath + "/git/refs/heads/" + encodePath(targetBranch), {
+      method: "PATCH",
+      body: JSON.stringify({ sha: commit.sha, force: false })
+    });
+  } else {
+    await request(repoPath + "/git/refs", {
+      method: "POST",
+      body: JSON.stringify({ ref: "refs/heads/" + targetBranch, sha: commit.sha })
+    });
+  }
 
   return {
     owner,
