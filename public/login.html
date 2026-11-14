@@ -5,40 +5,10 @@
 <meta name="theme-color" content="#090c0b"><title>WebGit — Private Access</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-:root{color-scheme:dark;--bg:#090c0b;--panel:#111814;--line:#29362d;--text:#edf4ee;--muted:#91a096;--dim:#66756b;--green:#b8f36b;--red:#ff7b75;--mono:"DM Mono",monospace;--sans:"Manrope",system-ui,sans-serif}
-*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 50% 25%,#263b2a66,transparent 48%),var(--bg);color:var(--text);font-family:var(--sans);display:grid;place-items:center;padding:22px}
-.card{width:min(100%,420px);padding:30px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(155deg,#131b15,#0d120f 75%);box-shadow:0 30px 90px #0008;animation:in .4s ease both}
-.mark{width:48px;height:48px;display:grid;place-items:center;margin-bottom:30px;border:1px solid #40513f;border-radius:14px;background:#18251a;color:var(--green);font:24px var(--mono}
-.eyebrow{color:var(--green);font:10px var(--mono);letter-spacing:.16em;text-transform:uppercase}
-h1{margin:17px 0 10px;font-size:clamp(38px,9vw,52px);letter-spacing:-.07em;line-height:1.05}h1 span{color:#9baa9f;font-weight:500}
-p{margin:0 0 28px;color:var(--muted);font-size:13px;line-height:1.75}
-label{display:block;margin-bottom:9px;color:#c0ccc3;font-size:11px;font-weight:700}
-.wrap{display:flex;gap:8px}
-input{width:100%;height:48px;padding:0 13px;border:1px solid var(--line);border-radius:10px;background:#0a100c;color:var(--text);font:14px var(--sans);outline:none;min-width:0}
-input:focus{border-color:#77994e;box-shadow:0 0 0 3px #b8f36b0d}
-button{height:48px;padding:0 14px;border:1px solid var(--line);border-radius:10px;background:#151d17;color:var(--muted);font:11px var(--sans);cursor:pointer}
-.submit{width:100%;margin-top:14px;border-color:#b8f36b;background:linear-gradient(110deg,#c8fb82,#a8e85e);color:#15200e;font-weight:800}
-button:disabled{opacity:.5;cursor:wait}
-.error{display:none;margin:10px 0 0;color:var(--red);font-size:11px;line-height:1.5}.error.show{display:block}
-.foot{margin-top:24px;text-align:center;color:var(--dim);font:9px var(--mono);letter-spacing:.15em}
-@keyframes in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-@media(prefers-reduced-motion:reduce){.card{animation:none}}
-</style>
+<link rel="stylesheet" href="/login.css">
 </head>
 <body>
-<main class="card">
-<div class="mark">⌘</div><div class="eyebrow">PRIVATE DEPLOYMENT WORKSPACE</div>
-<h1>Welcome <span>back.</span></h1>
-<p>Masukkan password untuk membuka WebGit dan mengakses repository GitHub.</p>
-<form id="form">
-<label for="password">Workspace password</label>
-<div class="wrap"><input id="password" type="password" placeholder="Masukkan password" autocomplete="current-password" required><button id="show" type="button">Show</button></div>
-<div id="error" class="error" role="alert"></div>
-<button id="submit" class="submit" type="submit">Unlock workspace ↗</button>
-</form>
-<div class="foot">WEBGIT / PRIVATE ACCESS</div>
-</main>
+<main class="login-shell"><section class="login-card"><div class="login-brand"><span class="login-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 7 3.5 12 8 17M16 7l4.5 5-4.5 5M14 4l-4 16"/></svg></span><span class="login-brand-name">webgit <span>/ private access</span></span></div><div class="login-eyebrow">PRIVATE DEPLOYMENT WORKSPACE</div><h1 class="login-title">Welcome <span>back.</span></h1><p class="login-copy">Masukkan password untuk membuka WebGit dan mengakses repository GitHub.</p><form id="form"><label class="login-label" for="password">Workspace password</label><div class="login-input-row"><input class="login-input" id="password" type="password" placeholder="Masukkan password" autocomplete="current-password" required><button class="login-show" id="show" type="button">Show</button></div><div id="error" class="login-error" role="alert"></div><button id="submit" class="login-submit" type="submit">Unlock workspace <span>↗</span></button></form><div class="login-security">Password is verified securely on the server</div></section><div class="login-footer">WEBGIT / DEPLOY CONSOLE</div></main>
 <script>
 const form=document.getElementById("form"),input=document.getElementById("password"),error=document.getElementById("error"),submit=document.getElementById("submit");
 document.getElementById("show").addEventListener("click",()=>{input.type=input.type==="password"?"text":"password";document.getElementById("show").textContent=input.type==="password"?"Show":"Hide"});
